@@ -41,6 +41,7 @@ export class RttUtils {
           rttPlatform: l.platform ?? null,
           arrLateness: l.arrivalLateness ?? null,
           depLateness: l.departureLateness ?? null,
+          cancelled: false,
         }
       })
   }
