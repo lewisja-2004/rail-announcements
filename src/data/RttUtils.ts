@@ -1,6 +1,8 @@
 import { CallingAtPoint } from '@components/CallingAtSelector'
 import { RttResponse, RttLocation } from '../api-types/get-service-rtt-types'
 import crsToStationItemMapper, { stationItemCompleter } from '@helpers/crsToStationItemMapper'
+import { isShortPlatform } from '@data/liveTrains/shortPlatforms'
+import type { TrainService } from '../api-types/get-services-types'
 
 import dayjs from 'dayjs'
 import dayjsTz from 'dayjs/plugin/timezone'
@@ -45,30 +47,45 @@ export class RttUtils {
   static getCallingPoints(rttService: RttResponse, fromLocationIndex: number): CallingAtPointWithRttDetail[] {
     if (fromLocationIndex === rttService.locations.length - 1) return []
 
-    return this.getEligibleLocationsInternal(rttService)
-      .slice(fromLocationIndex + 1)
-      .filter((l, i, arr) => {
-        if (!l.isPublicCall || l.displayAs === 'CANCELLED_CALL' || l.displayAs === 'DESTINATION' || l.displayAs === 'TERMINATES') return false
-        if (!l.crs) {
-          console.warn(`Location ${l.tiploc} has no CRS code`)
-          return false
-        }
-        // Ignore destination in calling points
-        if (i === arr.length - 1 && l.destination.some(d => d.tiploc === l.tiploc)) return false
-        return true
-      })
-      .map(l => {
-        const point: CallingAtPointWithRttDetail = {
-          ...stationItemCompleter(l.crs!),
-          requestStop: l.requestStop ?? false,
-          rttPlatform: l.platform ?? null,
-          arrLateness: l.arrivalLateness ?? null,
-          depLateness: l.departureLateness ?? null,
-          cancelled: false,
-        }
-        applyDivisions(point, l)
-        return point
-      })
+    const eligible = this.getEligibleLocationsInternal(rttService).slice(fromLocationIndex + 1)
+
+    const callingLocs = eligible.filter((l, i, arr) => {
+      if (!l.isPublicCall || l.displayAs === 'CANCELLED_CALL' || l.displayAs === 'DESTINATION' || l.displayAs === 'TERMINATES') return false
+      if (!l.crs) {
+        console.warn(`Location ${l.tiploc} has no CRS code`)
+        return false
+      }
+      // Ignore destination in calling points
+      if (i === arr.length - 1 && l.destination.some(d => d.tiploc === l.tiploc)) return false
+      return true
+    })
+
+    return callingLocs.map((l, i) => {
+      const point: CallingAtPointWithRttDetail = {
+        ...stationItemCompleter(l.crs!),
+        requestStop: l.requestStop ?? false,
+        rttPlatform: l.platform ?? null,
+        arrLateness: l.arrivalLateness ?? null,
+        depLateness: l.departureLateness ?? null,
+        cancelled: false,
+      }
+
+      // Look up short platform data from the static table
+      if (l.platform && l.crs) {
+        const mockTrain = {
+          operatorCode: rttService.atocCode,
+          length: l.passengerVehicleCount ?? null,
+          origin: l.origin.map(o => ({ crs: o.crs ?? '' })),
+          destination: l.destination.map(d => ({ crs: d.crs ?? '' })),
+          subsequentLocations: callingLocs.slice(i + 1).map(sl => ({ crs: sl.crs ?? '' })),
+        } as unknown as TrainService
+        const shortPlatform = isShortPlatform(l.crs, l.platform, mockTrain)
+        if (shortPlatform) point.shortPlatform = shortPlatform
+      }
+
+      applyDivisions(point, l)
+      return point
+    })
   }
 
   static getEligibleLocations(rttService: RttResponse): CallingAtPointWithRttDetail[] {
