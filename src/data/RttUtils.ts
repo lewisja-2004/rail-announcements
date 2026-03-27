@@ -1,6 +1,6 @@
 import { CallingAtPoint } from '@components/CallingAtSelector'
-import { RttResponse } from '../api-types/get-service-rtt-types'
-import { stationItemCompleter } from '@helpers/crsToStationItemMapper'
+import { RttResponse, RttLocation } from '../api-types/get-service-rtt-types'
+import crsToStationItemMapper, { stationItemCompleter } from '@helpers/crsToStationItemMapper'
 
 import dayjs from 'dayjs'
 import dayjsTz from 'dayjs/plugin/timezone'
@@ -14,9 +14,32 @@ interface CallingAtPointWithRttDetail extends CallingAtPoint {
   arrLateness: number | null
   depLateness: number | null
   cancelled: boolean
+  divisionInfo?: string
 }
 
 const eligibleLocationsSymbol = Symbol('eligibleLocations')
+
+function divisionInfoString(loc: RttLocation): string | undefined {
+  if (!loc.divisions?.length) return undefined
+  return loc.divisions
+    .map(div => {
+      const dest = div.callingPoints[div.callingPoints.length - 1]
+      if (!dest?.crs) return 'Divides here'
+      const stn = crsToStationItemMapper(dest.crs)
+      return `Divides for ${stn.name.replace(/ \(.*\)$/, '')}`
+    })
+    .join(', ')
+}
+
+function applyDivisions(point: CallingAtPointWithRttDetail, loc: RttLocation): void {
+  if (!loc.divisions?.length) return
+
+  const div = loc.divisions[0]
+  point.splitType = div.callingPoints.length > 0 ? 'splits' : 'splitTerminates'
+  point.splitForm = `${div.position}.${div.vehicleCount ?? 1}`
+  point.splitCallingPoints = div.callingPoints.filter(cp => cp.crs).map(cp => stationItemCompleter(cp.crs!))
+  point.divisionInfo = divisionInfoString(loc)
+}
 
 export class RttUtils {
   static getCallingPoints(rttService: RttResponse, fromLocationIndex: number): CallingAtPointWithRttDetail[] {
@@ -35,7 +58,7 @@ export class RttUtils {
         return true
       })
       .map(l => {
-        return {
+        const point: CallingAtPointWithRttDetail = {
           ...stationItemCompleter(l.crs!),
           requestStop: l.requestStop ?? false,
           rttPlatform: l.platform ?? null,
@@ -43,18 +66,24 @@ export class RttUtils {
           depLateness: l.departureLateness ?? null,
           cancelled: false,
         }
+        applyDivisions(point, l)
+        return point
       })
   }
 
   static getEligibleLocations(rttService: RttResponse): CallingAtPointWithRttDetail[] {
-    ;(rttService as any)[eligibleLocationsSymbol] ??= this.getEligibleLocationsInternal(rttService).map(l => ({
-      ...stationItemCompleter(l.crs!),
-      requestStop: l.requestStop ?? false,
-      rttPlatform: l.platform ?? null,
-      arrLateness: l.arrivalLateness ?? null,
-      depLateness: l.departureLateness ?? null,
-      cancelled: l.displayAs === 'CANCELLED_CALL',
-    }))
+    ;(rttService as any)[eligibleLocationsSymbol] ??= this.getEligibleLocationsInternal(rttService).map(l => {
+      const point: CallingAtPointWithRttDetail = {
+        ...stationItemCompleter(l.crs!),
+        requestStop: l.requestStop ?? false,
+        rttPlatform: l.platform ?? null,
+        arrLateness: l.arrivalLateness ?? null,
+        depLateness: l.departureLateness ?? null,
+        cancelled: l.displayAs === 'CANCELLED_CALL',
+        divisionInfo: divisionInfoString(l),
+      }
+      return point
+    })
 
     return (rttService as any)[eligibleLocationsSymbol]
   }
