@@ -2333,6 +2333,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@twemoji/svg@npm:^15.0.0":
+  version: 15.0.0
+  resolution: "@twemoji/svg@npm:15.0.0"
+  checksum: 10/23a3d7f651ed322e43fba7108975d360001718bf1a30408a0d0b1bdafdd2788f61b069bde72b7a469ae4c72b2f1186656ec91c2de03b30f7da3d1d0c0d7c86d3
+  languageName: node
+  linkType: hard
+
 "@types/connect@npm:3.4.38":
   version: 3.4.38
   resolution: "@types/connect@npm:3.4.38"
@@ -4453,6 +4460,7 @@ __metadata:
     "@hello-pangea/dnd": "npm:^18.0.1"
     "@reach/tabs": "npm:^0.18.0"
     "@sentry/nextjs": "npm:^10.42.0"
+    "@twemoji/svg": "npm:^15.0.0"
     "@types/node": "npm:^24.12.0"
     "@types/react": "npm:^19.2.14"
     "@types/react-dom": "npm:^19.2.3"
