@@ -29,18 +29,9 @@ const SECTION_DELAY = 300
 const LANGUAGE_DELAY = 2_000
 
 /** Platforms ("spor"/"track") that have recorded audio, in display order. */
-const TRACKS: string[] = [
-  ...Array.from({ length: 27 }, (_, i) => `${i}`),
-  '1a',
-  '1b',
-  '1c',
-  '2a',
-  '2b',
-  '2c',
-  '3a',
-  '3b',
-  '3c',
-].sort((a, b) => (parseInt(a) - parseInt(b) === 0 ? a.localeCompare(b) : parseInt(a) - parseInt(b)))
+const TRACKS: string[] = [...Array.from({ length: 27 }, (_, i) => `${i}`), '1a', '1b', '1c', '2a', '2b', '2c', '3a', '3b', '3c'].sort((a, b) =>
+  parseInt(a) - parseInt(b) === 0 ? a.localeCompare(b) : parseInt(a) - parseInt(b),
+)
 
 interface ICountdownOption {
   value: string
@@ -55,9 +46,30 @@ interface ICountdownOption {
 const COUNTDOWNS: ICountdownOption[] = [
   { value: 'moment', title: 'Om et øjeblik / In a moment', da: 'oejeblik', en: 'amoment' },
   { value: 'few', title: 'Om få minutter / In a few minutes', da: 'faaminutter', en: 'fewminutes' },
-  ...['5', '6', '7', '8', '9', '10', '12-15', '15-20', '20-25', '25-30', '35', '40', '45', '50', '55', '60', '65', '70', '75', '80', '85', '90'].map(
-    n => ({ value: `ca${n}min`, title: `Om ca. ${n} min. / In approx. ${n} min`, da: `ca${n}min`, en: `ca${n}min` }),
-  ),
+  ...[
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '10',
+    '12-15',
+    '15-20',
+    '20-25',
+    '25-30',
+    '35',
+    '40',
+    '45',
+    '50',
+    '55',
+    '60',
+    '65',
+    '70',
+    '75',
+    '80',
+    '85',
+    '90',
+  ].map(n => ({ value: `ca${n}min`, title: `Om ca. ${n} min. / In approx. ${n} min`, da: `ca${n}min`, en: `ca${n}min` })),
 ]
 
 interface IDisruptionOption {
@@ -111,7 +123,8 @@ export default class Banedanmark extends StationAnnouncementSystem {
   headerComponent() {
     return (
       <p>
-        This page generates bilingual Danish and English platform announcements for the Danish railway network using real station audio recordings, released on request to Banedanmark in a process known as "Aktindsigt".
+        This page generates bilingual Danish and English platform announcements for the Danish railway network using real station audio
+        recordings, released on request to Banedanmark in a process known as "Aktindsigt".
       </p>
     )
   }
