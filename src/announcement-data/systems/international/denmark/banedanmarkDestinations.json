@@ -17,11 +17,11 @@
   },
   {
     "id": "ar",
-    "name": "Aarhus Hovedbanegård"
+    "name": "Aarhus"
   },
   {
     "id": "arvianel",
-    "name": "Aarhus Hovedbanegård via København Syd"
+    "name": "Aarhus via København Syd"
   },
   {
     "id": "ap",
@@ -873,7 +873,7 @@
   },
   {
     "id": "strviaar",
-    "name": "Struer via Aarhus Hovedbanegård"
+    "name": "Struer via Aarhus"
   },
   {
     "id": "strviahr",
@@ -965,7 +965,7 @@
   },
   {
     "id": "tiviaar",
-    "name": "Thisted via Aarhus Hovedbanegård"
+    "name": "Thisted via Aarhus"
   },
   {
     "id": "tiviasj",
