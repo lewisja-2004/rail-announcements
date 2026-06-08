@@ -24,9 +24,15 @@ import Destinations from './banedanmarkDestinations.json'
  */
 
 /** Delay (ms) inserted before each section for natural pacing. */
-const SECTION_DELAY = 300
+const SECTION_DELAY = 225
+/** Gap (ms) after the spoken train time, before the track (or the destination, in English). */
+const AFTER_TIME_DELAY = 200
+/** Smaller gap (ms) before the closing clip that follows the track (e.g. the countdown). */
+const AFTER_TRACK_DELAY = 120
 /** Delay (ms) before switching from the Danish half to the English half. */
-const LANGUAGE_DELAY = 2_000
+const LANGUAGE_DELAY = 1_000
+/** Small gap (ms) between destinations when more than one is listed. */
+const BETWEEN_DESTINATION_DELAY = 100
 
 /** Platforms ("spor"/"track") that have recorded audio, in display order. */
 const TRACKS: string[] = [...Array.from({ length: 27 }, (_, i) => `${i}`), '1a', '1b', '1c', '2a', '2b', '2c', '3a', '3b', '3c'].sort((a, b) =>
@@ -105,15 +111,15 @@ interface IDisruptionOptions extends IBaseAnnouncementOptions {
   disruption: string
 }
 
-/** Small gap (ms) between destinations when more than one is listed. */
-const BETWEEN_DESTINATION_DELAY = 250
 const MAX_DESTINATIONS = 3
+/** Track value meaning "platform not yet known" — plays the bare "kører"/"departs" clip. */
+const UNKNOWN_TRACK = 'unknown'
 
 const HOURS: string[] = Array.from({ length: 24 }, (_, i) => `${i}`)
 const MINUTES: string[] = Array.from({ length: 60 }, (_, i) => `${i}`.padStart(2, '0'))
 
 export default class Banedanmark extends StationAnnouncementSystem {
-  readonly NAME = 'Banedanmark (Denmark)'
+  readonly NAME = 'Banedanmark Stations (Denmark)'
   readonly ID = 'BANEDANMARK_V1'
   readonly FILE_PREFIX = 'Banedanmark'
   readonly SYSTEM_TYPE = 'station'
@@ -124,7 +130,7 @@ export default class Banedanmark extends StationAnnouncementSystem {
     return (
       <p>
         This page generates bilingual Danish and English platform announcements for the Danish railway network using real station audio
-        recordings, released on request to Banedanmark in a process known as "Aktindsigt".
+        recordings, released on request to Banedanmark in a process similar to Freedom of Information, known as "Aktindsigt".
       </p>
     )
   }
@@ -150,9 +156,9 @@ export default class Banedanmark extends StationAnnouncementSystem {
     })
   }
 
-  /** Joins ordered segments into a clip list, delaying the lead of each segment. */
-  private joinSegments(segments: AudioItem[][], leadDelay: number): AudioItem[] {
-    return segments.flatMap((seg, i) => this.section(seg, i === 0 ? leadDelay : SECTION_DELAY))
+  /** Flattens `[clips, leadGap]` segments, applying each segment's lead gap to its first clip. */
+  private assemble(segments: [AudioItem[], number][]): AudioItem[] {
+    return segments.flatMap(([clips, gap]) => this.section(clips, gap))
   }
 
   /**
@@ -178,35 +184,52 @@ export default class Banedanmark extends StationAnnouncementSystem {
   }
 
   /**
-   * Builds the full bilingual clip list. Everything up to and including the track is identical
-   * between announcement types; `daTail`/`enTail` are the closing clips (countdown, or a
-   * disruption clip) and `trackChange` leads each language with the "change of track" notice.
+   * Builds the full bilingual clip list. Word order differs per language, so gaps are assigned
+   * explicitly: `AFTER_TIME_DELAY` follows the spoken time, `AFTER_TRACK_DELAY` follows the track,
+   * and `tailGap` precedes the closing clip when there is no track (e.g. a disruption message).
    */
   private buildAnnouncement(
     options: IBaseAnnouncementOptions,
-    { daTrailing, enTrailing, trackChange }: { daTrailing: AudioItem[][]; enTrailing: AudioItem[][]; trackChange: boolean },
+    {
+      trackChange,
+      daTrack,
+      enTrack,
+      daTail,
+      enTail,
+      tailGap = 0,
+    }: { trackChange: boolean; daTrack: string | null; enTrack: string | null; daTail: AudioItem[]; enTail: AudioItem[]; tailGap?: number },
   ): AudioItem[] {
     const hour = parseInt(options.hour, 10)
     const minute = options.minute
     const destinations = (options.destinations ?? []).filter(Boolean)
 
-    // Danish: [notice] → "Toget til X[, Y og Z]" → time → [track →] tail
-    const danish: AudioItem[][] = [this.destinationClips('da', destinations), this.timeClipsDa(hour, minute), ...daTrailing]
-    if (trackChange) danish.unshift([`da.extra.trkchg`])
+    // Danish: [notice] → "Toget til X" → time → [track] → tail
+    const danish: [AudioItem[], number][] = []
+    if (trackChange) danish.push([[`da.extra.trkchg`], 0])
+    danish.push([this.destinationClips('da', destinations), danish.length ? SECTION_DELAY : 0])
+    danish.push([this.timeClipsDa(hour, minute), SECTION_DELAY])
+    if (daTrack) danish.push([[daTrack], AFTER_TIME_DELAY])
+    danish.push([daTail, daTrack ? AFTER_TRACK_DELAY : tailGap])
 
-    // English: [notice] → time → "train to X[, Y and Z]" → [track →] tail
-    const english: AudioItem[][] = [this.timeClipsEn(hour, minute), this.destinationClips('en', destinations), ...enTrailing]
-    if (trackChange) english.unshift([`en.extra.trkchg`])
+    // English: [notice] → time → "train to X" → [track] → tail
+    const english: [AudioItem[], number][] = []
+    if (trackChange) english.push([[`en.extra.trkchg`], LANGUAGE_DELAY])
+    english.push([this.timeClipsEn(hour, minute), english.length ? SECTION_DELAY : LANGUAGE_DELAY])
+    english.push([this.destinationClips('en', destinations), AFTER_TIME_DELAY])
+    if (enTrack) english.push([[enTrack], SECTION_DELAY])
+    english.push([enTail, enTrack ? AFTER_TRACK_DELAY : tailGap])
 
-    return [...this.joinSegments(danish, 0), ...this.joinSegments(english, LANGUAGE_DELAY)]
+    return [...this.assemble(danish), ...this.assemble(english)]
   }
 
   private async playAnnouncement(options: IBanedanmarkAnnouncementOptions, download: boolean = false): Promise<void> {
     const countdown = COUNTDOWNS.find(c => c.value === options.countdown) ?? COUNTDOWNS[0]
     const files = this.buildAnnouncement(options, {
-      daTrailing: [[`da.track.spor${options.track}`], [`da.countdown.${countdown.da}`]],
-      enTrailing: [[`en.track.trk${options.track}`], [`en.countdown.${countdown.en}`]],
       trackChange: options.trackChange,
+      daTrack: options.track === UNKNOWN_TRACK ? `da.track.koerer` : `da.track.spor${options.track}`,
+      enTrack: options.track === UNKNOWN_TRACK ? `en.track.departs` : `en.track.trk${options.track}`,
+      daTail: [`da.countdown.${countdown.da}`],
+      enTail: [`en.countdown.${countdown.en}`],
     })
     await this.playAudioFiles(files, download)
   }
@@ -214,9 +237,12 @@ export default class Banedanmark extends StationAnnouncementSystem {
   private async playDisruption(options: IDisruptionOptions, download: boolean = false): Promise<void> {
     const disruption = DISRUPTIONS.find(d => d.value === options.disruption) ?? DISRUPTIONS[0]
     const files = this.buildAnnouncement(options, {
-      daTrailing: [[`da.extra.${disruption.da}`]],
-      enTrailing: [[`en.extra.${disruption.en}`]],
       trackChange: false,
+      daTrack: null,
+      enTrack: null,
+      daTail: [`da.extra.${disruption.da}`],
+      enTail: [`en.extra.${disruption.en}`],
+      tailGap: 0,
     })
     await this.playAudioFiles(files, download)
   }
@@ -250,7 +276,7 @@ export default class Banedanmark extends StationAnnouncementSystem {
     track: {
       name: 'Track (spor)',
       default: '5',
-      options: TRACKS.map(t => ({ title: t, value: t })),
+      options: [{ title: 'Unknown (not yet known)', value: UNKNOWN_TRACK }, ...TRACKS.map(t => ({ title: t, value: t }))],
       type: 'select' as const,
     },
     countdown: {
